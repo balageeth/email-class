@@ -2,14 +2,22 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
-import LoginScreen from "@/components/login-screen"
+import { supabase } from "@/lib/supabaseClient"
+import LoginScreen from "@/components/LoginScreen"
 
 export default function Home() {
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
+    // Check for error in URL params
+    const urlParams = new URLSearchParams(window.location.search)
+    const errorParam = urlParams.get("error")
+    if (errorParam === "no_code") {
+      setError("OAuth authorization was not completed. Please try signing in again.")
+    }
+
     const checkUser = async () => {
       try {
         const {
@@ -48,5 +56,5 @@ export default function Home() {
     )
   }
 
-  return <LoginScreen />
+  return <LoginScreen error={error} />
 }
