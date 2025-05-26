@@ -80,6 +80,19 @@ export default function LoginScreen({ error }: LoginScreenProps) {
         console.log("OAuth URL:", data.url)
         const logEntry = `OAuth initiated successfully, redirecting to: ${data.url}`
         setCallbackLogs((prev) => [...prev, logEntry])
+
+        // Parse the OAuth URL to see what redirect_uri is being used
+        if (data.url) {
+          try {
+            const oauthUrl = new URL(data.url)
+            const redirectUri = oauthUrl.searchParams.get("redirect_uri")
+            const logEntry2 = `Google OAuth redirect_uri parameter: ${redirectUri}`
+            setCallbackLogs((prev) => [...prev, logEntry2])
+            console.log(logEntry2)
+          } catch (e) {
+            console.log("Could not parse OAuth URL")
+          }
+        }
       }
     } catch (error: any) {
       console.error("❌ Unexpected error:", error)
@@ -106,9 +119,11 @@ export default function LoginScreen({ error }: LoginScreenProps) {
         alert(`Supabase OAuth Settings: ${JSON.stringify(settings.external, null, 2)}`)
       } else {
         console.error("Failed to fetch Supabase settings")
+        alert(`Failed to fetch Supabase settings: ${response.status}`)
       }
     } catch (error) {
       console.error("Error testing Supabase OAuth:", error)
+      alert(`Error testing Supabase OAuth: ${error}`)
     }
   }
 
@@ -147,7 +162,7 @@ export default function LoginScreen({ error }: LoginScreenProps) {
           <div className="p-4 text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-md">
             <strong>🔍 OAuth Flow Analysis</strong>
             <br />
-            OAuth redirects to Google correctly, but returns to login page. Let's debug the callback process.
+            Callback route works, but Google isn't sending authorization code. This is likely a redirect URL mismatch.
           </div>
 
           {callbackLogs.length > 0 && (
@@ -162,6 +177,30 @@ export default function LoginScreen({ error }: LoginScreenProps) {
               </div>
             </div>
           )}
+
+          <div className="p-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
+            <strong>🚨 CRITICAL: Check Google Cloud Console</strong>
+            <br />
+            <br />
+            <strong>Your Google OAuth app MUST have this exact redirect URI:</strong>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="bg-white px-2 py-1 rounded text-xs flex-1">
+                {supabaseUrl ? `${supabaseUrl}/auth/v1/callback` : "Configure Supabase URL first"}
+              </code>
+              {supabaseUrl && (
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${supabaseUrl}/auth/v1/callback`)}>
+                  <Copy className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
+            <br />
+            <strong>NOT your app URL:</strong>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="bg-white px-2 py-1 rounded text-xs flex-1 line-through text-gray-500">
+                {typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "Loading..."}
+              </code>
+            </div>
+          </div>
 
           <div className="p-4 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
             <strong>🔧 Configuration URLs:</strong>
@@ -189,20 +228,11 @@ export default function LoginScreen({ error }: LoginScreenProps) {
               )}
             </div>
             <br />
-            <strong>3. Your App Redirect URL:</strong>
+            <strong>3. Your App Redirect URL (for reference only):</strong>
             <div className="flex items-center gap-2 mt-1">
               <code className="bg-white px-2 py-1 rounded text-xs flex-1">
                 {typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "Loading..."}
               </code>
-              {typeof window !== "undefined" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => copyToClipboard(`${window.location.origin}/auth/callback`)}
-                >
-                  <Copy className="w-3 h-3" />
-                </Button>
-              )}
             </div>
           </div>
 
@@ -211,6 +241,15 @@ export default function LoginScreen({ error }: LoginScreenProps) {
             <br />
             <br />
             <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" asChild>
+                  <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">
+                    <ExternalLink className="w-3 h-3 mr-1" />
+                    Google Cloud Credentials
+                  </a>
+                </Button>
+                <span className="text-xs">← Add the Supabase redirect URI here</span>
+              </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" asChild>
                   <a
@@ -223,15 +262,6 @@ export default function LoginScreen({ error }: LoginScreenProps) {
                   </a>
                 </Button>
                 <span className="text-xs">← Check Google provider is enabled</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" asChild>
-                  <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">
-                    <ExternalLink className="w-3 h-3 mr-1" />
-                    Google Cloud Credentials
-                  </a>
-                </Button>
-                <span className="text-xs">← Check redirect URI is added</span>
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={testSupabaseOAuth}>
@@ -285,7 +315,7 @@ export default function LoginScreen({ error }: LoginScreenProps) {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                Continue with Google (Enhanced Debug)
+                Continue with Google (Debug Redirect URI)
               </>
             )}
           </Button>
