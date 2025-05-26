@@ -23,128 +23,106 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get("authorization")
     console.log("4. Auth header present:", !!authHeader)
 
-    // Try to get session first
-    console.log("5. Attempting to get session...")
+    // Try to get user first (this is more reliable than session)
+    console.log("5. Attempting to get user...")
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession()
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
 
-    console.log("6. Session check:", {
-      hasSession: !!session,
-      hasUser: !!session?.user,
-      hasProviderToken: !!session?.provider_token,
-      sessionError: sessionError?.message,
-      provider: session?.provider,
-      tokenLength: session?.provider_token?.length || 0,
+    console.log("6. User check:", {
+      hasUser: !!user,
+      userError: userError?.message,
+      userId: user?.id,
+      userEmail: user?.email,
     })
 
-    let validSession = session
-    let validUser = session?.user
-
-    // If no session from cookies, try to get user with auth header
-    if (!session && authHeader) {
+    // If no user from cookies, try with auth header
+    let validUser = user
+    if (!user && authHeader) {
       console.log("7. Trying to get user with auth header...")
       const {
-        data: { user },
-        error: userError,
+        data: { user: headerUser },
+        error: headerUserError,
       } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""))
 
       console.log("8. User from auth header:", {
-        hasUser: !!user,
-        userError: userError?.message,
-        userId: user?.id,
-        userEmail: user?.email,
+        hasUser: !!headerUser,
+        userError: headerUserError?.message,
+        userId: headerUser?.id,
+        userEmail: headerUser?.email,
       })
 
-      if (userError || !user) {
-        console.error("9. User authentication failed:", userError?.message || "No user")
+      if (headerUserError || !headerUser) {
+        console.error("9. User authentication failed:", headerUserError?.message || "No user")
         return NextResponse.json(
           {
             error: "Authentication required. Please sign in again.",
-            details: userError?.message || "No valid user found",
+            details: headerUserError?.message || "No valid user found",
           },
           { status: 401 },
         )
       }
 
-      validUser = user
-
-      // Since we have a valid user but no session with provider token,
-      // we need to get a fresh session. Let's try to refresh the session.
-      console.log("10. Attempting to refresh session...")
-      const {
-        data: { session: refreshedSession },
-        error: refreshError,
-      } = await supabase.auth.refreshSession()
-
-      console.log("11. Refresh session result:", {
-        hasRefreshedSession: !!refreshedSession,
-        hasProviderToken: !!refreshedSession?.provider_token,
-        refreshError: refreshError?.message,
-        tokenLength: refreshedSession?.provider_token?.length || 0,
-      })
-
-      if (refreshedSession?.provider_token) {
-        validSession = refreshedSession
-        console.log("12. Using refreshed session with provider token")
-      } else {
-        // If we still don't have a provider token, the user needs to re-authenticate
-        console.error("13. No provider token available after refresh")
-        return NextResponse.json(
-          {
-            error: "Gmail access token expired. Please sign out and sign in again to re-authorize Gmail access.",
-            details: "Provider token not available",
-          },
-          { status: 401 },
-        )
-      }
-    }
-
-    if (sessionError && !validSession) {
-      console.error("14. Session error:", sessionError)
-      return NextResponse.json(
-        {
-          error: "Session error",
-          details: sessionError.message,
-        },
-        { status: 401 },
-      )
-    }
-
-    if (!validSession && !validUser) {
-      console.error("15. No session or user found")
-      return NextResponse.json(
-        {
-          error: "Authentication required. Please sign in again.",
-          details: "No valid session or user found",
-        },
-        { status: 401 },
-      )
+      validUser = headerUser
     }
 
     if (!validUser) {
-      console.error("16. No user available")
+      console.error("10. No valid user found")
       return NextResponse.json(
         {
-          error: "No user in session",
+          error: "Authentication required. Please sign in again.",
+          details: "No valid user found",
         },
         { status: 401 },
       )
     }
 
-    if (!validSession?.provider_token) {
-      console.error("17. No provider token found")
+    // Get the stored provider token from our custom table
+    console.log("11. Fetching stored provider token...")
+    const { data: tokenData, error: tokenError } = await supabase
+      .from("user_tokens")
+      .select("access_token, refresh_token, expires_at")
+      .eq("user_id", validUser.id)
+      .eq("provider", "google")
+      .single()
+
+    console.log("12. Token data check:", {
+      hasTokenData: !!tokenData,
+      hasAccessToken: !!tokenData?.access_token,
+      tokenError: tokenError?.message,
+      expiresAt: tokenData?.expires_at,
+    })
+
+    if (tokenError || !tokenData?.access_token) {
+      console.error("13. No stored provider token found")
       return NextResponse.json(
         {
           error: "No Gmail access token found. Please sign out and sign in again to re-authorize Gmail access.",
+          details: "Provider token not stored or expired",
         },
-        { status: 400 },
+        { status: 401 },
       )
     }
 
-    console.log("18. Authentication validated, processing email fetch")
-    return await processEmailFetch(validSession, senderId, senderEmail, supabase)
+    // Check if token is expired
+    if (tokenData.expires_at) {
+      const expiresAt = new Date(tokenData.expires_at)
+      const now = new Date()
+      if (now >= expiresAt) {
+        console.error("14. Stored token is expired")
+        return NextResponse.json(
+          {
+            error: "Gmail access token has expired. Please sign out and sign in again to re-authorize Gmail access.",
+            details: "Token expired",
+          },
+          { status: 401 },
+        )
+      }
+    }
+
+    console.log("15. Valid token found, processing email fetch")
+    return await processEmailFetch(validUser, tokenData.access_token, senderId, senderEmail, supabase)
   } catch (error: any) {
     console.error("=== FETCH EMAILS API ROUTE ERROR ===")
     console.error("Error details:", {
@@ -156,10 +134,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processEmailFetch(session: any, senderId: string, senderEmail: string, supabase: any) {
-  const user = session.user
-  const accessToken = session.provider_token
-
+async function processEmailFetch(user: any, accessToken: string, senderId: string, senderEmail: string, supabase: any) {
   console.log("Processing email fetch for user:", user.id)
 
   // Test the Gmail API connection first

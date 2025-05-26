@@ -1,6 +1,67 @@
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
-import { NextResponse, type NextRequest } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
+
+export async function GET(request: NextRequest) {
+  const requestUrl = new URL(request.url)
+  const code = requestUrl.searchParams.get("code")
+  const error = requestUrl.searchParams.get("error")
+
+  // Handle OAuth errors
+  if (error) {
+    console.error("OAuth error:", error)
+    return NextResponse.redirect(`${requestUrl.origin}/auth/auth-code-error`)
+  }
+
+  if (code) {
+    const cookieStore = await cookies()
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
+
+    try {
+      const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+
+      if (exchangeError) {
+        console.error("Session exchange error:", exchangeError)
+        return NextResponse.redirect(`${requestUrl.origin}/auth/auth-code-error`)
+      }
+
+      // Store the provider token in our custom table for reliable access
+      if (data.session?.provider_token && data.session?.user) {
+        console.log("Storing provider token in database...")
+
+        const { error: tokenError } = await supabase.from("user_tokens").upsert(
+          {
+            user_id: data.session.user.id,
+            provider: "google",
+            access_token: data.session.provider_token,
+            refresh_token: data.session.provider_refresh_token || null,
+            expires_at: data.session.expires_at ? new Date(data.session.expires_at * 1000).toISOString() : null,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "user_id,provider",
+          },
+        )
+
+        if (tokenError) {
+          console.error("Error storing provider token:", tokenError)
+          // Don't fail the auth flow, but log the error
+        } else {
+          console.log("Provider token stored successfully")
+        }
+      }
+
+      // Success - redirect to dashboard
+      return NextResponse.redirect(`${requestUrl.origin}/dashboard`)
+    } catch (error) {
+      console.error("Unexpected error:", error)
+      return NextResponse.redirect(`${requestUrl.origin}/auth/auth-code-error`)
+    }
+  }
+
+  // No code parameter - redirect to login
+  return NextResponse.redirect(`${requestUrl.origin}/`)
+}
 
 export async function POST(request: NextRequest) {
   console.log("=== FETCH EMAILS API ROUTE START ===")
