@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Mail, Loader2, Copy } from "lucide-react"
+import { Mail, Loader2, Copy, ExternalLink } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
 interface LoginScreenProps {
@@ -12,6 +12,7 @@ interface LoginScreenProps {
 
 export default function LoginScreen({ error }: LoginScreenProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
 
   // Get Supabase URL from environment
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -42,6 +43,7 @@ export default function LoginScreen({ error }: LoginScreenProps) {
       })
 
       console.log("OAuth response:", { data, error })
+      setDebugInfo({ data, error, redirectUrl, supabaseUrl })
 
       if (error) {
         console.error("❌ OAuth initiation error:", error.message)
@@ -49,12 +51,35 @@ export default function LoginScreen({ error }: LoginScreenProps) {
       } else {
         console.log("✅ OAuth initiation successful")
         console.log("OAuth data:", data)
+        console.log("OAuth URL:", data.url)
       }
     } catch (error: any) {
       console.error("❌ Unexpected error:", error)
       alert(`Unexpected Error: ${error.message}`)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const testSupabaseOAuth = async () => {
+    try {
+      // Test if Supabase OAuth is configured by checking the providers
+      const response = await fetch(`${supabaseUrl}/auth/v1/settings`, {
+        headers: {
+          apikey: supabaseAnonKey!,
+          Authorization: `Bearer ${supabaseAnonKey!}`,
+        },
+      })
+
+      if (response.ok) {
+        const settings = await response.json()
+        console.log("Supabase Auth Settings:", settings)
+        alert(`Supabase OAuth Settings: ${JSON.stringify(settings.external, null, 2)}`)
+      } else {
+        console.error("Failed to fetch Supabase settings")
+      }
+    } catch (error) {
+      console.error("Error testing Supabase OAuth:", error)
     }
   }
 
@@ -79,17 +104,16 @@ export default function LoginScreen({ error }: LoginScreenProps) {
           {error && <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">{error}</div>}
 
           <div className="p-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
-            <strong>⚠️ Configuration Issue Detected!</strong>
+            <strong>🔍 Debugging OAuth Issue</strong>
             <br />
-            The OAuth flow is redirecting to Vercel login instead of Google. This means your Supabase OAuth is not
-            configured correctly.
+            No authorization code received. Let's check the configuration step by step.
           </div>
 
           <div className="p-4 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
-            <strong>🔧 Supabase Configuration Required:</strong>
+            <strong>🔧 Configuration URLs:</strong>
             <br />
             <br />
-            <strong>1. Your Supabase Project URL:</strong>
+            <strong>1. Supabase Project URL:</strong>
             <div className="flex items-center gap-2 mt-1">
               <code className="bg-white px-2 py-1 rounded text-xs flex-1">{supabaseUrl || "Not found"}</code>
               {supabaseUrl && (
@@ -99,7 +123,7 @@ export default function LoginScreen({ error }: LoginScreenProps) {
               )}
             </div>
             <br />
-            <strong>2. Required Google OAuth Redirect URI:</strong>
+            <strong>2. Google OAuth Redirect URI (add this to Google Console):</strong>
             <div className="flex items-center gap-2 mt-1">
               <code className="bg-white px-2 py-1 rounded text-xs flex-1">
                 {supabaseUrl ? `${supabaseUrl}/auth/v1/callback` : "Configure Supabase URL first"}
@@ -129,32 +153,50 @@ export default function LoginScreen({ error }: LoginScreenProps) {
           </div>
 
           <div className="p-4 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-md">
-            <strong>📋 Setup Instructions:</strong>
+            <strong>🔍 Quick Links to Check Configuration:</strong>
             <br />
             <br />
-            <strong>Step 1: Supabase Configuration</strong>
-            <br />
-            1. Go to your Supabase project dashboard
-            <br />
-            2. Navigate to Authentication → Providers → Google
-            <br />
-            3. Enable Google provider
-            <br />
-            4. Add your Google OAuth Client ID and Secret
-            <br />
-            <br />
-            <strong>Step 2: Google OAuth Configuration</strong>
-            <br />
-            1. Go to Google Cloud Console
-            <br />
-            2. Navigate to APIs & Services → Credentials
-            <br />
-            3. Add this to "Authorized redirect URIs":
-            <br />
-            <code className="bg-white px-1 rounded text-xs">
-              {supabaseUrl ? `${supabaseUrl}/auth/v1/callback` : "Configure Supabase URL first"}
-            </code>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" asChild>
+                  <a
+                    href={`https://supabase.com/dashboard/project/qstkkltfedhaanztfoje/auth/providers`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ExternalLink className="w-3 h-3 mr-1" />
+                    Supabase Auth Providers
+                  </a>
+                </Button>
+                <span className="text-xs">← Check Google provider is enabled</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" asChild>
+                  <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">
+                    <ExternalLink className="w-3 h-3 mr-1" />
+                    Google Cloud Credentials
+                  </a>
+                </Button>
+                <span className="text-xs">← Check redirect URI is added</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={testSupabaseOAuth}>
+                  <ExternalLink className="w-3 h-3 mr-1" />
+                  Test Supabase OAuth Config
+                </Button>
+                <span className="text-xs">← Check if OAuth providers are configured</span>
+              </div>
+            </div>
           </div>
+
+          {debugInfo && (
+            <div className="p-4 text-sm text-purple-600 bg-purple-50 border border-purple-200 rounded-md">
+              <strong>🐛 Last OAuth Attempt Debug Info:</strong>
+              <pre className="text-xs mt-2 bg-white p-2 rounded overflow-auto">
+                {JSON.stringify(debugInfo, null, 2)}
+              </pre>
+            </div>
+          )}
 
           <Button onClick={handleGoogleLogin} disabled={isLoading} className="w-full h-12 text-base" variant="outline">
             {isLoading ? (
@@ -182,7 +224,7 @@ export default function LoginScreen({ error }: LoginScreenProps) {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                Continue with Google (Will fail until configured)
+                Continue with Google (Debug Mode)
               </>
             )}
           </Button>
