@@ -4,6 +4,8 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 export async function GET(request: NextRequest) {
+  console.log("🚀 CALLBACK ROUTE HIT!")
+
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get("code")
   const error = requestUrl.searchParams.get("error")
@@ -11,10 +13,12 @@ export async function GET(request: NextRequest) {
   console.log("=== AUTH CALLBACK START ===")
   console.log("1. Code present:", !!code)
   console.log("2. Error present:", !!error)
+  console.log("3. Full URL:", requestUrl.toString())
+  console.log("4. Search params:", Object.fromEntries(requestUrl.searchParams))
 
   // Handle OAuth errors
   if (error) {
-    console.error("3. OAuth error:", error)
+    console.error("5. OAuth error:", error)
     return NextResponse.redirect(`${requestUrl.origin}/auth/auth-code-error`)
   }
 
@@ -23,10 +27,10 @@ export async function GET(request: NextRequest) {
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
 
     try {
-      console.log("4. Exchanging code for session...")
+      console.log("6. Exchanging code for session...")
       const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
-      console.log("5. Exchange result:", {
+      console.log("7. Exchange result:", {
         hasSession: !!data.session,
         hasUser: !!data.user,
         hasProviderToken: !!data.session?.provider_token,
@@ -36,25 +40,18 @@ export async function GET(request: NextRequest) {
       })
 
       if (exchangeError) {
-        console.error("6. Session exchange error:", exchangeError)
+        console.error("8. Session exchange error:", exchangeError)
         return NextResponse.redirect(`${requestUrl.origin}/auth/auth-code-error`)
       }
 
-      console.log("7. Full session data:", JSON.stringify(data.session, null, 2))
-      console.log("8. Session properties:", data.session ? Object.keys(data.session) : "No session")
-      console.log("9. Provider token type:", typeof data.session?.provider_token)
-      console.log("10. Provider token length:", data.session?.provider_token?.length || 0)
+      console.log("9. Full session data:", JSON.stringify(data.session, null, 2))
+      console.log("10. Session properties:", data.session ? Object.keys(data.session) : "No session")
 
-      // Store the provider token in our custom table for reliable access
-      if (data.session?.provider_token && data.session?.user) {
-        console.log("11. Storing provider token in database...")
-        console.log("12. Token details:", {
-          tokenLength: data.session.provider_token.length,
-          refreshTokenLength: data.session.provider_refresh_token?.length || 0,
-          expiresAt: data.session.expires_at,
-          userId: data.session.user.id,
-        })
+      // Check for provider token
+      if (data.session?.provider_token) {
+        console.log("11. ✅ Provider token found! Length:", data.session.provider_token.length)
 
+        // Store the provider token
         const tokenData = {
           user_id: data.session.user.id,
           provider: "google",
@@ -64,60 +61,41 @@ export async function GET(request: NextRequest) {
           updated_at: new Date().toISOString(),
         }
 
-        console.log("13. Inserting token data:", {
-          user_id: tokenData.user_id,
-          provider: tokenData.provider,
-          hasAccessToken: !!tokenData.access_token,
-          hasRefreshToken: !!tokenData.refresh_token,
-          expires_at: tokenData.expires_at,
-        })
-
-        const { data: insertResult, error: tokenError } = await supabase.from("user_tokens").upsert(tokenData, {
+        console.log("12. Storing token in database...")
+        const { error: tokenError } = await supabase.from("user_tokens").upsert(tokenData, {
           onConflict: "user_id,provider",
         })
 
-        console.log("14. Token storage result:", {
-          success: !tokenError,
-          error: tokenError?.message,
-          insertResult,
-        })
-
         if (tokenError) {
-          console.error("15. Error storing provider token:", tokenError)
-          // Don't fail the auth flow, but log the error
+          console.error("13. ❌ Token storage error:", tokenError)
         } else {
-          console.log("16. Provider token stored successfully")
+          console.log("14. ✅ Token stored successfully!")
         }
       } else {
-        console.error("17. No provider token in session data")
-        console.log("18. Session data structure:", {
-          hasSession: !!data.session,
-          sessionKeys: data.session ? Object.keys(data.session) : [],
-          providerToken: data.session?.provider_token ? "present" : "missing",
-        })
+        console.error("15. ❌ No provider token in session!")
+        console.log("16. Available session keys:", data.session ? Object.keys(data.session) : [])
 
-        // Check if there are any other token-related fields
+        // Check for any token-like fields
         if (data.session) {
-          const tokenFields = Object.keys(data.session).filter(
-            (key) => key.toLowerCase().includes("token") || key.toLowerCase().includes("access"),
+          const allKeys = Object.keys(data.session)
+          const tokenKeys = allKeys.filter(
+            (key) =>
+              key.toLowerCase().includes("token") ||
+              key.toLowerCase().includes("access") ||
+              key.toLowerCase().includes("oauth"),
           )
-          console.log("19. Token-related fields found:", tokenFields)
-          tokenFields.forEach((field) => {
-            console.log(`20. ${field}:`, (data.session as any)[field] ? "PRESENT" : "MISSING")
-          })
+          console.log("17. Token-related keys found:", tokenKeys)
         }
       }
 
-      console.log("21. Redirecting to dashboard")
-      // Success - redirect to dashboard
+      console.log("18. Redirecting to dashboard...")
       return NextResponse.redirect(`${requestUrl.origin}/dashboard`)
     } catch (error) {
-      console.error("22. Unexpected error:", error)
+      console.error("19. ❌ Unexpected error:", error)
       return NextResponse.redirect(`${requestUrl.origin}/auth/auth-code-error`)
     }
   }
 
-  // No code parameter - redirect to login
-  console.log("23. No code parameter, redirecting to login")
+  console.log("20. No code parameter, redirecting to login")
   return NextResponse.redirect(`${requestUrl.origin}/`)
 }

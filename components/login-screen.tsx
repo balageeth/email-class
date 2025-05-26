@@ -12,6 +12,7 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     try {
       setIsLoading(true)
+      console.log("🔐 Starting Google OAuth...")
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -25,13 +26,15 @@ export default function LoginScreen() {
         },
       })
 
+      console.log("OAuth response:", { data, error })
+
       if (error) {
-        console.error("Error logging in:", error.message)
+        console.error("❌ OAuth initiation error:", error.message)
       } else {
-        console.log("OAuth initiation successful:", data)
+        console.log("✅ OAuth initiation successful")
       }
     } catch (error) {
-      console.error("Error:", error)
+      console.error("❌ Unexpected error:", error)
     } finally {
       setIsLoading(false)
     }
