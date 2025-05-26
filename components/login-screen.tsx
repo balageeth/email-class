@@ -5,26 +5,22 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Mail, Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
-import { useRouter } from "next/navigation"
 
 export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
 
   const handleGoogleLogin = async () => {
     try {
       setIsLoading(true)
 
-      // Get the current origin, but ensure it's the production URL when deployed
-      const redirectTo =
-        process.env.NODE_ENV === "production"
-          ? `${window.location.origin}/auth/callback`
-          : `${window.location.origin}/auth/callback`
-
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo,
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
         },
       })
 

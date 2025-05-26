@@ -5,13 +5,19 @@ import { type NextRequest, NextResponse } from "next/server"
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get("code")
+  const next = requestUrl.searchParams.get("next") ?? "/dashboard"
 
   if (code) {
     const cookieStore = cookies()
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
-    await supabase.auth.exchangeCodeForSession(code)
+
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+    if (!error) {
+      return NextResponse.redirect(`${requestUrl.origin}${next}`)
+    }
   }
 
-  // Use the request URL origin to ensure we redirect to the correct domain
-  return NextResponse.redirect(`${requestUrl.origin}/dashboard`)
+  // Return the user to an error page with instructions
+  return NextResponse.redirect(`${requestUrl.origin}/auth/auth-code-error`)
 }
