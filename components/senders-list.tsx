@@ -96,11 +96,24 @@ export function SendersList({ refreshTrigger }: SendersListProps) {
     setFetchingEmails(senderId)
 
     try {
+      // Get the current session to include in the request
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
+        throw new Error("No active session. Please sign in again.")
+      }
+
       const response = await fetch("/api/fetch-emails", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          // Include the authorization header with the access token
+          Authorization: `Bearer ${session.access_token}`,
         },
+        // Include credentials to send cookies
+        credentials: "include",
         body: JSON.stringify({
           senderId,
           senderEmail,
