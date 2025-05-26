@@ -12,6 +12,6 @@ export async function GET(request: NextRequest) {
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  // Redirect to dashboard or home page after successful login
+  // Use the request URL origin to ensure we redirect to the correct domain
   return NextResponse.redirect(`${requestUrl.origin}/dashboard`)
 }

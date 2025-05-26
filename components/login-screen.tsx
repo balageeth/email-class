@@ -14,10 +14,17 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     try {
       setIsLoading(true)
+
+      // Get the current origin, but ensure it's the production URL when deployed
+      const redirectTo =
+        process.env.NODE_ENV === "production"
+          ? `${window.location.origin}/auth/callback`
+          : `${window.location.origin}/auth/callback`
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo,
         },
       })
 
