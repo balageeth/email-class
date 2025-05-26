@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Mail, Loader2 } from "lucide-react"
+import { Mail, Loader2, Copy } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
 interface LoginScreenProps {
@@ -12,6 +12,10 @@ interface LoginScreenProps {
 
 export default function LoginScreen({ error }: LoginScreenProps) {
   const [isLoading, setIsLoading] = useState(false)
+
+  // Get Supabase URL from environment
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   const handleGoogleLogin = async () => {
     try {
@@ -23,6 +27,7 @@ export default function LoginScreen({ error }: LoginScreenProps) {
       const redirectUrl = `${currentOrigin}/auth/callback`
       console.log("Current origin:", currentOrigin)
       console.log("Redirect URL:", redirectUrl)
+      console.log("Supabase URL:", supabaseUrl)
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -53,9 +58,14 @@ export default function LoginScreen({ error }: LoginScreenProps) {
     }
   }
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    alert("Copied to clipboard!")
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-2xl">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
             <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
@@ -68,13 +78,82 @@ export default function LoginScreen({ error }: LoginScreenProps) {
         <CardContent className="space-y-4">
           {error && <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">{error}</div>}
 
-          <div className="p-3 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
-            <strong>Debug Info:</strong>
+          <div className="p-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
+            <strong>⚠️ Configuration Issue Detected!</strong>
             <br />
-            Current URL: {typeof window !== "undefined" ? window.location.origin : "Loading..."}
+            The OAuth flow is redirecting to Vercel login instead of Google. This means your Supabase OAuth is not
+            configured correctly.
+          </div>
+
+          <div className="p-4 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
+            <strong>🔧 Supabase Configuration Required:</strong>
             <br />
-            Expected Redirect:{" "}
-            {typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "Loading..."}
+            <br />
+            <strong>1. Your Supabase Project URL:</strong>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="bg-white px-2 py-1 rounded text-xs flex-1">{supabaseUrl || "Not found"}</code>
+              {supabaseUrl && (
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(supabaseUrl)}>
+                  <Copy className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
+            <br />
+            <strong>2. Required Google OAuth Redirect URI:</strong>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="bg-white px-2 py-1 rounded text-xs flex-1">
+                {supabaseUrl ? `${supabaseUrl}/auth/v1/callback` : "Configure Supabase URL first"}
+              </code>
+              {supabaseUrl && (
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${supabaseUrl}/auth/v1/callback`)}>
+                  <Copy className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
+            <br />
+            <strong>3. Your App Redirect URL:</strong>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="bg-white px-2 py-1 rounded text-xs flex-1">
+                {typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "Loading..."}
+              </code>
+              {typeof window !== "undefined" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copyToClipboard(`${window.location.origin}/auth/callback`)}
+                >
+                  <Copy className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="p-4 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-md">
+            <strong>📋 Setup Instructions:</strong>
+            <br />
+            <br />
+            <strong>Step 1: Supabase Configuration</strong>
+            <br />
+            1. Go to your Supabase project dashboard
+            <br />
+            2. Navigate to Authentication → Providers → Google
+            <br />
+            3. Enable Google provider
+            <br />
+            4. Add your Google OAuth Client ID and Secret
+            <br />
+            <br />
+            <strong>Step 2: Google OAuth Configuration</strong>
+            <br />
+            1. Go to Google Cloud Console
+            <br />
+            2. Navigate to APIs & Services → Credentials
+            <br />
+            3. Add this to "Authorized redirect URIs":
+            <br />
+            <code className="bg-white px-1 rounded text-xs">
+              {supabaseUrl ? `${supabaseUrl}/auth/v1/callback` : "Configure Supabase URL first"}
+            </code>
           </div>
 
           <Button onClick={handleGoogleLogin} disabled={isLoading} className="w-full h-12 text-base" variant="outline">
@@ -103,7 +182,7 @@ export default function LoginScreen({ error }: LoginScreenProps) {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                Continue with Google
+                Continue with Google (Will fail until configured)
               </>
             )}
           </Button>
@@ -112,16 +191,6 @@ export default function LoginScreen({ error }: LoginScreenProps) {
             By continuing, you agree to our Terms of Service and Privacy Policy.
             <br />
             We'll request Gmail read access to fetch your emails.
-          </div>
-
-          <div className="p-3 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-md">
-            <strong>Configuration Check:</strong>
-            <br />
-            1. Supabase OAuth redirect URL should be:{" "}
-            <code>{typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "Loading..."}</code>
-            <br />
-            2. Google OAuth authorized redirect URI should include:{" "}
-            <code>{typeof window !== "undefined" ? window.location.origin : "Loading..."}</code>
           </div>
         </CardContent>
       </Card>
