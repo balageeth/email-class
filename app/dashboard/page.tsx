@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation"
 import { LogOut, Mail } from "lucide-react"
 import { AddSenderDialog } from "@/components/add-sender-dialog"
 import { SendersList } from "@/components/senders-list"
-import { DebugSession } from "@/components/debug-session"
+import { DebugSession } from "@/components/debug-sessions"
 import { Toaster } from "@/components/ui/toaster"
 
 export default function Dashboard() {
