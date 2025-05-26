@@ -7,34 +7,37 @@ export async function POST(request: NextRequest) {
     const { senderId, senderEmail } = await request.json()
     console.log("Fetch emails request:", { senderId, senderEmail })
 
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
 
-    // Get the current user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
-
-    console.log("User check:", { user: user?.id, error: userError })
-
-    if (userError || !user) {
-      console.error("User authentication failed:", userError)
-      return NextResponse.json({ error: "Unauthorized - No valid user session" }, { status: 401 })
-    }
-
-    // Get the user's Google access token from their session
+    // First, get the session directly
     const {
       data: { session },
+      error: sessionError,
     } = await supabase.auth.getSession()
 
     console.log("Session check:", {
       hasSession: !!session,
+      hasUser: !!session?.user,
       hasProviderToken: !!session?.provider_token,
-      provider: session?.provider_token ? "present" : "missing",
+      sessionError,
+      userId: session?.user?.id,
     })
 
-    if (!session?.provider_token) {
+    if (sessionError || !session || !session.user) {
+      console.error("Session authentication failed:", sessionError)
+      return NextResponse.json(
+        {
+          error: "Unauthorized - No valid user session",
+          details: sessionError?.message || "No session found",
+        },
+        { status: 401 },
+      )
+    }
+
+    const user = session.user
+
+    if (!session.provider_token) {
       return NextResponse.json(
         {
           error: "No Gmail access token found. Please re-authenticate with Google.",
@@ -45,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     const accessToken = session.provider_token
 
-    // Use the Gmail API to fetch emails - FIXED: Use "me" instead of senderEmail
+    // Use the Gmail API to fetch emails
     const response = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=from:${senderEmail}&maxResults=20`,
       {
