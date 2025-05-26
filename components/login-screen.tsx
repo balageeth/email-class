@@ -18,10 +18,16 @@ export default function LoginScreen({ error }: LoginScreenProps) {
       setIsLoading(true)
       console.log("🔐 Starting Google OAuth...")
 
+      // Log the current URL and expected redirect
+      const currentOrigin = window.location.origin
+      const redirectUrl = `${currentOrigin}/auth/callback`
+      console.log("Current origin:", currentOrigin)
+      console.log("Redirect URL:", redirectUrl)
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
           scopes: "openid email profile https://www.googleapis.com/auth/gmail.readonly",
           queryParams: {
             access_type: "offline",
@@ -34,11 +40,14 @@ export default function LoginScreen({ error }: LoginScreenProps) {
 
       if (error) {
         console.error("❌ OAuth initiation error:", error.message)
+        alert(`OAuth Error: ${error.message}`)
       } else {
         console.log("✅ OAuth initiation successful")
+        console.log("OAuth data:", data)
       }
     } catch (error: any) {
       console.error("❌ Unexpected error:", error)
+      alert(`Unexpected Error: ${error.message}`)
     } finally {
       setIsLoading(false)
     }
@@ -58,6 +67,15 @@ export default function LoginScreen({ error }: LoginScreenProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           {error && <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">{error}</div>}
+
+          <div className="p-3 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
+            <strong>Debug Info:</strong>
+            <br />
+            Current URL: {typeof window !== "undefined" ? window.location.origin : "Loading..."}
+            <br />
+            Expected Redirect:{" "}
+            {typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "Loading..."}
+          </div>
 
           <Button onClick={handleGoogleLogin} disabled={isLoading} className="w-full h-12 text-base" variant="outline">
             {isLoading ? (
@@ -94,6 +112,16 @@ export default function LoginScreen({ error }: LoginScreenProps) {
             By continuing, you agree to our Terms of Service and Privacy Policy.
             <br />
             We'll request Gmail read access to fetch your emails.
+          </div>
+
+          <div className="p-3 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-md">
+            <strong>Configuration Check:</strong>
+            <br />
+            1. Supabase OAuth redirect URL should be:{" "}
+            <code>{typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "Loading..."}</code>
+            <br />
+            2. Google OAuth authorized redirect URI should include:{" "}
+            <code>{typeof window !== "undefined" ? window.location.origin : "Loading..."}</code>
           </div>
         </CardContent>
       </Card>
