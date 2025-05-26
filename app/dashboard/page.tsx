@@ -19,18 +19,38 @@ export default function Dashboard() {
 
   useEffect(() => {
     const getUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      setUser(user)
-      setLoading(false)
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
 
-      if (!user) {
+        if (session?.user) {
+          setUser(session.user)
+        } else {
+          router.push("/")
+        }
+      } catch (error) {
+        console.error("Error getting user:", error)
         router.push("/")
+      } finally {
+        setLoading(false)
       }
     }
 
     getUser()
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT" || !session) {
+        router.push("/")
+      } else if (session?.user) {
+        setUser(session.user)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [router])
 
   const handleSignOut = async () => {
@@ -39,6 +59,14 @@ export default function Dashboard() {
   }
 
   if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -60,23 +88,43 @@ export default function Dashboard() {
           </Button>
         </div>
 
-        <Card>
+        <Card className="mb-6">
           <CardHeader>
             <CardTitle>Welcome back!</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="space-y-2">
+              <p>
+                <strong>Email:</strong> {user?.email}
+              </p>
+              <p>
+                <strong>Name:</strong> {user?.user_metadata?.full_name || "Not provided"}
+              </p>
+              <p>
+                <strong>Last sign in:</strong>{" "}
+                {user?.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : "Unknown"}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Email Senders</CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="grid gap-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold">Email Senders</h2>
+                <h2 className="text-xl font-semibold">Manage Your Email Senders</h2>
                 <AddSenderDialog onSenderAdded={() => setRefreshTrigger((prev) => prev + 1)} />
               </div>
 
               <SendersList refreshTrigger={refreshTrigger} />
             </div>
-
-            <Toaster />
           </CardContent>
         </Card>
+
+        <Toaster />
       </div>
     </div>
   )
