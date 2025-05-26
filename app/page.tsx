@@ -1,23 +1,47 @@
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
+"use client"
+
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
 import AuthButtonServer from "@/components/auth-button-server"
 import LoginScreen from "@/components/login-screen"
 
-async function getSession() {
-  const supabase = createServerComponentClient({ cookies })
-  try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    return session
-  } catch (error) {
-    console.error("Error:", error)
-    return null
-  }
-}
+export default function Home() {
+  const [session, setSession] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
 
-export default async function Home() {
-  const session = await getSession()
+  useEffect(() => {
+    const getSession = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        setSession(session)
+      } catch (error) {
+        console.error("Error:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    getSession()
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-between p-24">
