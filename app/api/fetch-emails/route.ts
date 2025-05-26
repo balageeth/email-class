@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr"
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { NextResponse, type NextRequest } from "next/server"
 
@@ -13,49 +13,54 @@ export async function POST(request: NextRequest) {
     const cookieStore = await cookies()
     console.log("2. Cookie store created")
 
-    // Create Supabase client with proper cookie handling using @supabase/ssr
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
-            } catch {
-              // The `setAll` method was called from a Server Component.
-              // This can be ignored if you have middleware refreshing
-              // user sessions.
-            }
-          },
-        },
-      },
-    )
-    console.log("3. Supabase client created with @supabase/ssr")
+    // Create Supabase client with proper cookie handling
+    const supabase = createRouteHandlerClient({
+      cookies: () => cookieStore,
+    })
+    console.log("3. Supabase client created")
 
-    // Try to get session
-    console.log("4. Attempting to get session...")
+    // Try to get user first (this validates the session)
+    console.log("4. Attempting to get user...")
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    console.log("5. User check:", {
+      hasUser: !!user,
+      userError: userError?.message,
+      userId: user?.id,
+      userEmail: user?.email,
+    })
+
+    if (userError || !user) {
+      console.error("6. User authentication failed:", userError?.message || "No user")
+      return NextResponse.json(
+        {
+          error: "Authentication required. Please sign in again.",
+          details: userError?.message || "No valid user found",
+        },
+        { status: 401 },
+      )
+    }
+
+    // Now get the session to access provider token
+    console.log("7. Getting session for provider token...")
     const {
       data: { session },
       error: sessionError,
     } = await supabase.auth.getSession()
 
-    console.log("5. Session check:", {
+    console.log("8. Session check:", {
       hasSession: !!session,
-      hasUser: !!session?.user,
       hasProviderToken: !!session?.provider_token,
       sessionError: sessionError?.message,
-      userId: session?.user?.id,
-      userEmail: session?.user?.email,
       provider: session?.provider,
       tokenLength: session?.provider_token?.length || 0,
     })
 
     if (sessionError) {
-      console.error("6. Session error:", sessionError)
+      console.error("9. Session error:", sessionError)
       return NextResponse.json(
         {
           error: "Session error",
@@ -65,29 +70,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!session) {
-      console.error("7. No session found")
-      return NextResponse.json(
-        {
-          error: "Authentication required. Please sign in again.",
-          details: "No valid session found",
-        },
-        { status: 401 },
-      )
-    }
-
-    if (!session.user) {
-      console.error("8. No user in session")
-      return NextResponse.json(
-        {
-          error: "No user in session",
-        },
-        { status: 401 },
-      )
-    }
-
-    if (!session.provider_token) {
-      console.error("9. No provider token found")
+    if (!session?.provider_token) {
+      console.error("10. No provider token found")
       return NextResponse.json(
         {
           error: "No Gmail access token found. Please re-authenticate with Google.",
@@ -96,7 +80,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log("10. Session validated, processing email fetch")
+    console.log("11. Authentication validated, processing email fetch")
     return await processEmailFetch(session, senderId, senderEmail, supabase)
   } catch (error: any) {
     console.error("=== FETCH EMAILS API ROUTE ERROR ===")
