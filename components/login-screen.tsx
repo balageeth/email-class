@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Mail, Loader2, Copy, ExternalLink } from "lucide-react"
@@ -13,14 +13,40 @@ interface LoginScreenProps {
 export default function LoginScreen({ error }: LoginScreenProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [debugInfo, setDebugInfo] = useState<any>(null)
+  const [callbackLogs, setCallbackLogs] = useState<string[]>([])
 
   // Get Supabase URL from environment
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
+  useEffect(() => {
+    // Check if we just came back from OAuth
+    const urlParams = new URLSearchParams(window.location.search)
+    const error = urlParams.get("error")
+    const code = urlParams.get("code")
+
+    if (error || code) {
+      const logEntry = `OAuth return detected - Error: ${error}, Code: ${!!code}, URL: ${window.location.href}`
+      setCallbackLogs((prev) => [...prev, logEntry])
+      console.log(logEntry)
+    }
+
+    // Listen for auth state changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      const logEntry = `Auth state change: ${event}, Session: ${!!session}`
+      setCallbackLogs((prev) => [...prev, logEntry])
+      console.log(logEntry, session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
   const handleGoogleLogin = async () => {
     try {
       setIsLoading(true)
+      setCallbackLogs([])
       console.log("🔐 Starting Google OAuth...")
 
       // Log the current URL and expected redirect
@@ -47,15 +73,18 @@ export default function LoginScreen({ error }: LoginScreenProps) {
 
       if (error) {
         console.error("❌ OAuth initiation error:", error.message)
-        alert(`OAuth Error: ${error.message}`)
+        const logEntry = `OAuth initiation error: ${error.message}`
+        setCallbackLogs((prev) => [...prev, logEntry])
       } else {
         console.log("✅ OAuth initiation successful")
-        console.log("OAuth data:", data)
         console.log("OAuth URL:", data.url)
+        const logEntry = `OAuth initiated successfully, redirecting to: ${data.url}`
+        setCallbackLogs((prev) => [...prev, logEntry])
       }
     } catch (error: any) {
       console.error("❌ Unexpected error:", error)
-      alert(`Unexpected Error: ${error.message}`)
+      const logEntry = `Unexpected error: ${error.message}`
+      setCallbackLogs((prev) => [...prev, logEntry])
     } finally {
       setIsLoading(false)
     }
@@ -83,6 +112,18 @@ export default function LoginScreen({ error }: LoginScreenProps) {
     }
   }
 
+  const testCallbackRoute = async () => {
+    try {
+      const response = await fetch("/auth/callback?test=true")
+      const text = await response.text()
+      console.log("Callback route test:", response.status, text)
+      alert(`Callback route test: ${response.status} - ${text.substring(0, 200)}`)
+    } catch (error) {
+      console.error("Error testing callback route:", error)
+      alert(`Callback route error: ${error}`)
+    }
+  }
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     alert("Copied to clipboard!")
@@ -103,11 +144,24 @@ export default function LoginScreen({ error }: LoginScreenProps) {
         <CardContent className="space-y-4">
           {error && <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">{error}</div>}
 
-          <div className="p-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
-            <strong>🔍 Debugging OAuth Issue</strong>
+          <div className="p-4 text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-md">
+            <strong>🔍 OAuth Flow Analysis</strong>
             <br />
-            No authorization code received. Let's check the configuration step by step.
+            OAuth redirects to Google correctly, but returns to login page. Let's debug the callback process.
           </div>
+
+          {callbackLogs.length > 0 && (
+            <div className="p-4 text-sm text-green-600 bg-green-50 border border-green-200 rounded-md">
+              <strong>📋 OAuth Flow Logs:</strong>
+              <div className="mt-2 space-y-1">
+                {callbackLogs.map((log, index) => (
+                  <div key={index} className="text-xs font-mono bg-white p-1 rounded">
+                    {log}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="p-4 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
             <strong>🔧 Configuration URLs:</strong>
@@ -153,7 +207,7 @@ export default function LoginScreen({ error }: LoginScreenProps) {
           </div>
 
           <div className="p-4 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-md">
-            <strong>🔍 Quick Links to Check Configuration:</strong>
+            <strong>🔍 Debug Tools:</strong>
             <br />
             <br />
             <div className="space-y-2">
@@ -185,6 +239,13 @@ export default function LoginScreen({ error }: LoginScreenProps) {
                   Test Supabase OAuth Config
                 </Button>
                 <span className="text-xs">← Check if OAuth providers are configured</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={testCallbackRoute}>
+                  <ExternalLink className="w-3 h-3 mr-1" />
+                  Test Callback Route
+                </Button>
+                <span className="text-xs">← Check if callback route is working</span>
               </div>
             </div>
           </div>
@@ -224,7 +285,7 @@ export default function LoginScreen({ error }: LoginScreenProps) {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                Continue with Google (Debug Mode)
+                Continue with Google (Enhanced Debug)
               </>
             )}
           </Button>
