@@ -7,11 +7,15 @@ import { supabase } from "@/lib/supabase"
 import type { User } from "@supabase/supabase-js"
 import { useRouter } from "next/navigation"
 import { LogOut, Mail } from "lucide-react"
+import { AddSenderDialog } from "@/components/add-sender-dialog"
+import { SendersList } from "@/components/senders-list"
+import { Toaster } from "@/components/ui/toaster"
 
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   useEffect(() => {
     const getUser = async () => {
@@ -61,18 +65,16 @@ export default function Dashboard() {
             <CardTitle>Welcome back!</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <p>
-                <strong>Email:</strong> {user?.email}
-              </p>
-              <p>
-                <strong>Name:</strong> {user?.user_metadata?.full_name || "Not provided"}
-              </p>
-              <p>
-                <strong>Last sign in:</strong>{" "}
-                {user?.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : "Unknown"}
-              </p>
+            <div className="grid gap-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold">Email Senders</h2>
+                <AddSenderDialog onSenderAdded={() => setRefreshTrigger((prev) => prev + 1)} />
+              </div>
+
+              <SendersList refreshTrigger={refreshTrigger} />
             </div>
+
+            <Toaster />
           </CardContent>
         </Card>
       </div>
