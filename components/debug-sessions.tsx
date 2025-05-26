@@ -31,7 +31,7 @@ export function DebugSession() {
         userError: userError,
         tokenLength: session?.provider_token?.length || 0,
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error checking session:", error)
       setSessionInfo({ error: error.message })
     } finally {
