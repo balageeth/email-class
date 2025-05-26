@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Mail, Trash2, RefreshCw, Loader2 } from "lucide-react"
+import { Mail, Trash2, RefreshCw, Loader2, Eye } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useToast } from "@/hooks/use-toast"
 
@@ -13,6 +13,7 @@ interface Sender {
   email: string
   name: string
   created_at: string
+  email_count?: number
 }
 
 interface SendersListProps {
@@ -33,9 +34,13 @@ export function SendersList({ refreshTrigger }: SendersListProps) {
 
       if (!user) return
 
+      // Fetch senders with email count
       const { data, error } = await supabase
         .from("senders")
-        .select("*")
+        .select(`
+          *,
+          emails(count)
+        `)
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
 
@@ -44,7 +49,14 @@ export function SendersList({ refreshTrigger }: SendersListProps) {
         return
       }
 
-      setSenders(data || [])
+      // Transform the data to include email count
+      const sendersWithCount =
+        data?.map((sender) => ({
+          ...sender,
+          email_count: sender.emails?.[0]?.count || 0,
+        })) || []
+
+      setSenders(sendersWithCount)
     } catch (error) {
       console.error("Error:", error)
     } finally {
@@ -84,24 +96,35 @@ export function SendersList({ refreshTrigger }: SendersListProps) {
     setFetchingEmails(senderId)
 
     try {
-      // This is a placeholder for Gmail API integration
-      // In a real implementation, you would:
-      // 1. Get Gmail API access token
-      // 2. Search for emails from the sender
-      // 3. Store them in the emails table
-
-      toast({
-        title: "Feature Coming Soon",
-        description: `Email fetching from ${senderEmail} will be implemented with Gmail API integration`,
+      const response = await fetch("/api/fetch-emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          senderId,
+          senderEmail,
+        }),
       })
 
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-    } catch (error) {
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to fetch emails")
+      }
+
+      toast({
+        title: "Success",
+        description: `Fetched ${result.emailsFetched} emails, stored ${result.emailsStored} new emails`,
+      })
+
+      // Refresh the senders list to update email counts
+      fetchSenders()
+    } catch (error: any) {
       console.error("Error fetching emails:", error)
       toast({
         title: "Error",
-        description: "Failed to fetch emails",
+        description: error.message || "Failed to fetch emails",
         variant: "destructive",
       })
     } finally {
@@ -142,6 +165,7 @@ export function SendersList({ refreshTrigger }: SendersListProps) {
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-medium">{sender.name}</h3>
                     <Badge variant="secondary">{sender.email}</Badge>
+                    {sender.email_count > 0 && <Badge variant="outline">{sender.email_count} emails</Badge>}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     Added {new Date(sender.created_at).toLocaleDateString()}
@@ -166,6 +190,12 @@ export function SendersList({ refreshTrigger }: SendersListProps) {
                       </>
                     )}
                   </Button>
+                  {sender.email_count > 0 && (
+                    <Button variant="outline" size="sm">
+                      <Eye className="w-4 h-4 mr-2" />
+                      View Emails
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" onClick={() => deleteSender(sender.id)}>
                     <Trash2 className="w-4 h-4" />
                   </Button>

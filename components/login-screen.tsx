@@ -17,6 +17,7 @@ export default function LoginScreen() {
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
+          scopes: "openid email profile https://www.googleapis.com/auth/gmail.readonly",
           queryParams: {
             access_type: "offline",
             prompt: "consent",
@@ -44,7 +45,7 @@ export default function LoginScreen() {
             </div>
           </div>
           <CardTitle className="text-2xl font-bold">Welcome to MailMinder</CardTitle>
-          <CardDescription>Sign in with your Google account to get started</CardDescription>
+          <CardDescription>Sign in with your Google account to access Gmail and track emails</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Button onClick={handleGoogleLogin} disabled={isLoading} className="w-full h-12 text-base" variant="outline">
@@ -74,7 +75,9 @@ export default function LoginScreen() {
           </Button>
 
           <div className="text-center text-sm text-muted-foreground">
-            By continuing, you agree to our Terms of Service and Privacy Policy
+            By continuing, you agree to our Terms of Service and Privacy Policy.
+            <br />
+            We'll request Gmail read access to fetch your emails.
           </div>
         </CardContent>
       </Card>
