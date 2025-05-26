@@ -69,6 +69,49 @@ export default function LoginScreen({ error }: LoginScreenProps) {
       })
 
       console.log("OAuth response:", { data, error })
+
+      // Enhanced OAuth URL debugging
+      if (data.url) {
+        console.log("=== DETAILED OAUTH URL ANALYSIS ===")
+        console.log("Full OAuth URL:", data.url)
+
+        try {
+          const oauthUrl = new URL(data.url)
+          console.log("OAuth URL Host:", oauthUrl.host)
+          console.log("OAuth URL Pathname:", oauthUrl.pathname)
+
+          // Log ALL search parameters
+          console.log("=== ALL OAUTH URL PARAMETERS ===")
+          for (const [key, value] of oauthUrl.searchParams.entries()) {
+            console.log(`${key}:`, value)
+          }
+
+          // Specifically check for redirect_uri
+          const redirectUri = oauthUrl.searchParams.get("redirect_uri")
+          const clientId = oauthUrl.searchParams.get("client_id")
+          const scope = oauthUrl.searchParams.get("scope")
+          const state = oauthUrl.searchParams.get("state")
+
+          console.log("=== KEY PARAMETERS ===")
+          console.log("redirect_uri:", redirectUri)
+          console.log("client_id:", clientId)
+          console.log("scope:", scope)
+          console.log("state:", state)
+
+          // Update the logs for display
+          const logEntry2 = `Full OAuth URL: ${data.url}`
+          const logEntry3 = `redirect_uri parameter: ${redirectUri || "MISSING!"}`
+          const logEntry4 = `client_id parameter: ${clientId || "MISSING!"}`
+          const logEntry5 = `OAuth URL host: ${oauthUrl.host}`
+
+          setCallbackLogs((prev) => [...prev, logEntry2, logEntry3, logEntry4, logEntry5])
+        } catch (e) {
+          console.log("Could not parse OAuth URL:", e)
+          const logEntry = `OAuth URL parsing error: ${e}`
+          setCallbackLogs((prev) => [...prev, logEntry])
+        }
+      }
+
       setDebugInfo({ data, error, redirectUrl, supabaseUrl })
 
       if (error) {
@@ -86,9 +129,15 @@ export default function LoginScreen({ error }: LoginScreenProps) {
           try {
             const oauthUrl = new URL(data.url)
             const redirectUri = oauthUrl.searchParams.get("redirect_uri")
-            const logEntry2 = `Google OAuth redirect_uri parameter: ${redirectUri}`
-            setCallbackLogs((prev) => [...prev, logEntry2])
+            const clientId = oauthUrl.searchParams.get("client_id")
+            const scope = oauthUrl.searchParams.get("scope")
+            const logEntry2 = `Google OAuth redirect_uri: ${redirectUri}`
+            const logEntry3 = `Google OAuth client_id: ${clientId}`
+            const logEntry4 = `Google OAuth scope: ${scope}`
+            setCallbackLogs((prev) => [...prev, logEntry2, logEntry3, logEntry4])
             console.log(logEntry2)
+            console.log(logEntry3)
+            console.log(logEntry4)
           } catch (e) {
             console.log("Could not parse OAuth URL")
           }
@@ -116,7 +165,18 @@ export default function LoginScreen({ error }: LoginScreenProps) {
       if (response.ok) {
         const settings = await response.json()
         console.log("Supabase Auth Settings:", settings)
-        alert(`Supabase OAuth Settings: ${JSON.stringify(settings.external, null, 2)}`)
+
+        // Check specifically for Google provider
+        const googleProvider = settings.external?.google
+        if (googleProvider) {
+          alert(
+            `✅ Google Provider Found!\n\nEnabled: ${googleProvider.enabled}\nClient ID: ${googleProvider.client_id ? "Set" : "Missing"}\nRedirect URI: ${googleProvider.redirect_uri || "Not set"}`,
+          )
+        } else {
+          alert(
+            `❌ Google Provider Not Found!\n\nAvailable providers: ${Object.keys(settings.external || {}).join(", ")}`,
+          )
+        }
       } else {
         console.error("Failed to fetch Supabase settings")
         alert(`Failed to fetch Supabase settings: ${response.status}`)
@@ -162,7 +222,7 @@ export default function LoginScreen({ error }: LoginScreenProps) {
           <div className="p-4 text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-md">
             <strong>🔍 OAuth Flow Analysis</strong>
             <br />
-            Callback route works, but Google isn't sending authorization code. This is likely a redirect URL mismatch.
+            Google Cloud Console is configured correctly. Issue is likely in Supabase OAuth configuration.
           </div>
 
           {callbackLogs.length > 0 && (
@@ -179,26 +239,24 @@ export default function LoginScreen({ error }: LoginScreenProps) {
           )}
 
           <div className="p-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
-            <strong>🚨 CRITICAL: Check Google Cloud Console</strong>
+            <strong>🚨 NEXT STEPS: Check Supabase Configuration</strong>
             <br />
             <br />
-            <strong>Your Google OAuth app MUST have this exact redirect URI:</strong>
+            <strong>1. Click "Test Supabase OAuth Config" below</strong>
+            <br />
+            <strong>2. Check your Supabase Google provider settings:</strong>
             <div className="flex items-center gap-2 mt-1">
-              <code className="bg-white px-2 py-1 rounded text-xs flex-1">
-                {supabaseUrl ? `${supabaseUrl}/auth/v1/callback` : "Configure Supabase URL first"}
-              </code>
-              {supabaseUrl && (
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${supabaseUrl}/auth/v1/callback`)}>
-                  <Copy className="w-3 h-3" />
-                </Button>
-              )}
-            </div>
-            <br />
-            <strong>NOT your app URL:</strong>
-            <div className="flex items-center gap-2 mt-1">
-              <code className="bg-white px-2 py-1 rounded text-xs flex-1 line-through text-gray-500">
-                {typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "Loading..."}
-              </code>
+              <Button size="sm" variant="outline" asChild>
+                <a
+                  href={`https://supabase.com/dashboard/project/qstkkltfedhaanztfoje/auth/providers`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink className="w-3 h-3 mr-1" />
+                  Supabase Auth Providers
+                </a>
+              </Button>
+              <span className="text-xs">← Verify Google provider is enabled with correct Client ID/Secret</span>
             </div>
           </div>
 
@@ -216,7 +274,7 @@ export default function LoginScreen({ error }: LoginScreenProps) {
               )}
             </div>
             <br />
-            <strong>2. Google OAuth Redirect URI (add this to Google Console):</strong>
+            <strong>2. Google OAuth Redirect URI (✅ Correctly configured):</strong>
             <div className="flex items-center gap-2 mt-1">
               <code className="bg-white px-2 py-1 rounded text-xs flex-1">
                 {supabaseUrl ? `${supabaseUrl}/auth/v1/callback` : "Configure Supabase URL first"}
@@ -228,10 +286,10 @@ export default function LoginScreen({ error }: LoginScreenProps) {
               )}
             </div>
             <br />
-            <strong>3. Your App Redirect URL (for reference only):</strong>
+            <strong>3. Your Production App URL:</strong>
             <div className="flex items-center gap-2 mt-1">
               <code className="bg-white px-2 py-1 rounded text-xs flex-1">
-                {typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "Loading..."}
+                {typeof window !== "undefined" ? window.location.origin : "Loading..."}
               </code>
             </div>
           </div>
@@ -242,13 +300,20 @@ export default function LoginScreen({ error }: LoginScreenProps) {
             <br />
             <div className="space-y-2">
               <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={testSupabaseOAuth}>
+                  <ExternalLink className="w-3 h-3 mr-1" />
+                  Test Supabase OAuth Config
+                </Button>
+                <span className="text-xs">← Check if Google provider is properly configured</span>
+              </div>
+              <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" asChild>
                   <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">
                     <ExternalLink className="w-3 h-3 mr-1" />
                     Google Cloud Credentials
                   </a>
                 </Button>
-                <span className="text-xs">← Add the Supabase redirect URI here</span>
+                <span className="text-xs">← ✅ Already correctly configured</span>
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" asChild>
@@ -261,21 +326,14 @@ export default function LoginScreen({ error }: LoginScreenProps) {
                     Supabase Auth Providers
                   </a>
                 </Button>
-                <span className="text-xs">← Check Google provider is enabled</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={testSupabaseOAuth}>
-                  <ExternalLink className="w-3 h-3 mr-1" />
-                  Test Supabase OAuth Config
-                </Button>
-                <span className="text-xs">← Check if OAuth providers are configured</span>
+                <span className="text-xs">← Check Google provider settings here</span>
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={testCallbackRoute}>
                   <ExternalLink className="w-3 h-3 mr-1" />
                   Test Callback Route
                 </Button>
-                <span className="text-xs">← Check if callback route is working</span>
+                <span className="text-xs">← ✅ Already working</span>
               </div>
             </div>
           </div>
@@ -315,7 +373,7 @@ export default function LoginScreen({ error }: LoginScreenProps) {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                Continue with Google (Debug Redirect URI)
+                Continue with Google (Enhanced Debug)
               </>
             )}
           </Button>
