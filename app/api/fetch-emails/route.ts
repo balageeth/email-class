@@ -1,11 +1,11 @@
-import { type NextRequest, NextResponse } from "next/server"
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
-import { GmailService } from "@/lib/gmail"
+import { NextResponse, type NextRequest } from "next/server"
 
 export async function POST(request: NextRequest) {
   try {
     const { senderId, senderEmail } = await request.json()
+    console.log("Fetch emails request:", { senderId, senderEmail })
 
     const cookieStore = cookies()
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
@@ -16,14 +16,23 @@ export async function POST(request: NextRequest) {
       error: userError,
     } = await supabase.auth.getUser()
 
+    console.log("User check:", { user: user?.id, error: userError })
+
     if (userError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      console.error("User authentication failed:", userError)
+      return NextResponse.json({ error: "Unauthorized - No valid user session" }, { status: 401 })
     }
 
     // Get the user's Google access token from their session
     const {
       data: { session },
     } = await supabase.auth.getSession()
+
+    console.log("Session check:", {
+      hasSession: !!session,
+      hasProviderToken: !!session?.provider_token,
+      provider: session?.provider_token ? "present" : "missing",
+    })
 
     if (!session?.provider_token) {
       return NextResponse.json(
@@ -34,52 +43,56 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Initialize Gmail service
-    const gmailService = new GmailService(session.provider_token)
+    const accessToken = session.provider_token
 
-    // Fetch emails from the sender
-    const messages = await gmailService.searchEmails(senderEmail, 20)
+    // Use the Gmail API to fetch emails
+    const response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/${senderEmail}/messages?q=from:${senderEmail}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    )
 
-    // Process and store emails in database
-    const emailsToInsert = messages.map((message) => {
-      const { subject, from, date, body } = gmailService.extractEmailContent(message)
-
-      return {
-        sender_id: senderId,
-        user_id: user.id,
-        subject,
-        body: body.substring(0, 10000), // Limit body length
-        received_at: new Date(Number.parseInt(message.internalDate)).toISOString(),
-        gmail_message_id: message.id,
-      }
-    })
-
-    // Insert emails into database (ignore duplicates)
-    const { data: insertedEmails, error: insertError } = await supabase
-      .from("emails")
-      .upsert(emailsToInsert, {
-        onConflict: "gmail_message_id",
-        ignoreDuplicates: true,
-      })
-      .select()
-
-    if (insertError) {
-      console.error("Error inserting emails:", insertError)
-      return NextResponse.json({ error: "Failed to store emails" }, { status: 500 })
+    if (!response.ok) {
+      console.error("Gmail API error:", response.status, response.statusText)
+      return NextResponse.json({ error: "Failed to fetch emails from Gmail API" }, { status: 500 })
     }
 
-    return NextResponse.json({
-      success: true,
-      emailsFetched: messages.length,
-      emailsStored: insertedEmails?.length || 0,
-    })
-  } catch (error) {
-    console.error("Error in fetch-emails API:", error)
-    return NextResponse.json(
-      {
-        error: "Failed to fetch emails from Gmail",
-      },
-      { status: 500 },
+    const data = await response.json()
+
+    // Extract email IDs
+    const emailIds = data.messages?.map((message: any) => message.id) || []
+
+    // Fetch the email content for each email ID
+    const emailContents = await Promise.all(
+      emailIds.map(async (emailId: string) => {
+        const emailResponse = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/${senderEmail}/messages/${emailId}?format=full`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+        )
+
+        if (!emailResponse.ok) {
+          console.error("Gmail API error for email ID:", emailId, emailResponse.status, emailResponse.statusText)
+          return null // Or handle the error as needed
+        }
+
+        const emailData = await emailResponse.json()
+        return emailData
+      }),
     )
+
+    // Filter out any failed email fetches (where emailContents[i] is null)
+    const validEmailContents = emailContents.filter((content) => content !== null)
+
+    return NextResponse.json({ emails: validEmailContents }, { status: 200 })
+  } catch (error: any) {
+    console.error("Unexpected error:", error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
