@@ -39,6 +39,9 @@ export async function POST(request: NextRequest) {
       tokenLength: session?.provider_token?.length || 0,
     })
 
+    let validSession = session
+    let validUser = session?.user
+
     // If no session from cookies, try to get user with auth header
     if (!session && authHeader) {
       console.log("7. Trying to get user with auth header...")
@@ -65,20 +68,41 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Try to get session again after user verification
-      const {
-        data: { session: newSession },
-        error: newSessionError,
-      } = await supabase.auth.getSession()
+      validUser = user
 
-      if (newSession?.provider_token) {
-        console.log("10. Found session after user verification")
-        return await processEmailFetch(newSession, senderId, senderEmail, supabase)
+      // Since we have a valid user but no session with provider token,
+      // we need to get a fresh session. Let's try to refresh the session.
+      console.log("10. Attempting to refresh session...")
+      const {
+        data: { session: refreshedSession },
+        error: refreshError,
+      } = await supabase.auth.refreshSession()
+
+      console.log("11. Refresh session result:", {
+        hasRefreshedSession: !!refreshedSession,
+        hasProviderToken: !!refreshedSession?.provider_token,
+        refreshError: refreshError?.message,
+        tokenLength: refreshedSession?.provider_token?.length || 0,
+      })
+
+      if (refreshedSession?.provider_token) {
+        validSession = refreshedSession
+        console.log("12. Using refreshed session with provider token")
+      } else {
+        // If we still don't have a provider token, the user needs to re-authenticate
+        console.error("13. No provider token available after refresh")
+        return NextResponse.json(
+          {
+            error: "Gmail access token expired. Please sign out and sign in again to re-authorize Gmail access.",
+            details: "Provider token not available",
+          },
+          { status: 401 },
+        )
       }
     }
 
-    if (sessionError) {
-      console.error("11. Session error:", sessionError)
+    if (sessionError && !validSession) {
+      console.error("14. Session error:", sessionError)
       return NextResponse.json(
         {
           error: "Session error",
@@ -88,19 +112,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!session) {
-      console.error("12. No session found")
+    if (!validSession && !validUser) {
+      console.error("15. No session or user found")
       return NextResponse.json(
         {
           error: "Authentication required. Please sign in again.",
-          details: "No valid session found",
+          details: "No valid session or user found",
         },
         { status: 401 },
       )
     }
 
-    if (!session.user) {
-      console.error("13. No user in session")
+    if (!validUser) {
+      console.error("16. No user available")
       return NextResponse.json(
         {
           error: "No user in session",
@@ -109,18 +133,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!session.provider_token) {
-      console.error("14. No provider token found")
+    if (!validSession?.provider_token) {
+      console.error("17. No provider token found")
       return NextResponse.json(
         {
-          error: "No Gmail access token found. Please re-authenticate with Google.",
+          error: "No Gmail access token found. Please sign out and sign in again to re-authorize Gmail access.",
         },
         { status: 400 },
       )
     }
 
-    console.log("15. Authentication validated, processing email fetch")
-    return await processEmailFetch(session, senderId, senderEmail, supabase)
+    console.log("18. Authentication validated, processing email fetch")
+    return await processEmailFetch(validSession, senderId, senderEmail, supabase)
   } catch (error: any) {
     console.error("=== FETCH EMAILS API ROUTE ERROR ===")
     console.error("Error details:", {
