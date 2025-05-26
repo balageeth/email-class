@@ -21,6 +21,24 @@ export function DebugSession() {
         error: userError,
       } = await supabase.auth.getUser()
 
+      // Also check stored tokens
+      let storedToken = null
+      if (user) {
+        const { data: tokenData, error: tokenError } = await supabase
+          .from("user_tokens")
+          .select("provider, expires_at, created_at")
+          .eq("user_id", user.id)
+          .eq("provider", "google")
+          .single()
+
+        storedToken = {
+          hasStoredToken: !!tokenData,
+          tokenError: tokenError?.message,
+          expiresAt: tokenData?.expires_at,
+          createdAt: tokenData?.created_at,
+        }
+      }
+
       setSessionInfo({
         hasSession: !!session,
         hasUser: !!user,
@@ -30,6 +48,7 @@ export function DebugSession() {
         sessionError: error,
         userError: userError,
         tokenLength: session?.provider_token?.length || 0,
+        storedToken,
       })
     } catch (error: any) {
       console.error("Error checking session:", error)
