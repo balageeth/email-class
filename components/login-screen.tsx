@@ -43,6 +43,7 @@ const LoginScreen = ({ error }: { error?: string | null }) => {
             access_type: "offline",
             prompt: "consent",
           },
+          scopes: "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.readonly",
         },
       })
 
@@ -73,6 +74,7 @@ const LoginScreen = ({ error }: { error?: string | null }) => {
             access_type: "offline",
             prompt: "consent",
           },
+          scopes: "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.readonly",
           skipBrowserRedirect: true, // This prevents the redirect!
         },
       })
@@ -91,27 +93,73 @@ const LoginScreen = ({ error }: { error?: string | null }) => {
 
         // Check the redirect_uri parameter specifically
         const redirectUri = oauthUrl.searchParams.get("redirect_uri")
+        const redirectTo = oauthUrl.searchParams.get("redirect_to")
         console.log("6. Redirect URI in OAuth URL:", redirectUri)
+        console.log("7. Redirect To in OAuth URL:", redirectTo)
 
-        setDebugInfo(`
-Debug Info:
+        // Now let's follow the OAuth URL to see what Google gets
+        console.log("8. 🔍 Let's see what this URL actually redirects to...")
+
+        // Make a fetch request to see where it redirects (this will show us the Google OAuth URL)
+        try {
+          const response = await fetch(data.url, {
+            method: "GET",
+            redirect: "manual", // Don't follow redirects automatically
+          })
+
+          const location = response.headers.get("location")
+          console.log("9. Supabase redirects to:", location)
+
+          if (location) {
+            const googleUrl = new URL(location)
+            console.log("10. Google OAuth URL breakdown:")
+            console.log("    - Host:", googleUrl.host)
+            console.log("    - Search params:", Object.fromEntries(googleUrl.searchParams))
+
+            const googleRedirectUri = googleUrl.searchParams.get("redirect_uri")
+            console.log("11. 🎯 ACTUAL redirect_uri sent to Google:", googleRedirectUri)
+
+            setDebugInfo(`
+🔍 Debug Results:
 - Supabase URL: ${supabaseUrl}
 - Generated OAuth URL: ${data.url}
-- Redirect URI: ${redirectUri}
-- Host: ${oauthUrl.host}
-        `)
+- Redirect To: ${redirectTo}
+- Google OAuth URL: ${location}
+- 🎯 ACTUAL redirect_uri sent to Google: ${googleRedirectUri}
 
-        if (redirectUri && redirectUri.includes("supabase.co")) {
-          console.log("✅ OAuth URL correctly points to Supabase")
-          console.log("7. 🎯 CONCLUSION: OAuth URL is correct!")
-          console.log("8. 🔧 NEXT STEP: Check your Google Cloud Console redirect URIs")
-          console.log("9. 📋 Your Google OAuth app should have ONLY this redirect URI:")
-          console.log(`   ${redirectUri}`)
-        } else {
-          console.log("❌ OAuth URL does NOT point to Supabase!")
-          console.log("7. 🚨 PROBLEM: OAuth URL is misconfigured")
-          console.log("8. 🔧 Expected redirect URI should contain 'supabase.co'")
-          console.log(`9. 📋 But got: ${redirectUri}`)
+🔧 SOLUTION:
+Your Google OAuth app needs this EXACT redirect URI:
+${googleRedirectUri}
+
+📋 Steps to fix:
+1. Go to Google Cloud Console
+2. Navigate to APIs & Services > Credentials
+3. Edit your OAuth 2.0 Client ID
+4. Add this redirect URI: ${googleRedirectUri}
+5. Save and try signing in again
+            `)
+          } else {
+            setDebugInfo("❌ Could not determine Google OAuth URL")
+          }
+        } catch (fetchError) {
+          console.log("9. Could not fetch redirect location:", fetchError)
+          setDebugInfo(`
+🔍 Debug Results:
+- Supabase URL: ${supabaseUrl}
+- Generated OAuth URL: ${data.url}
+- Redirect To: ${redirectTo}
+
+🔧 LIKELY SOLUTION:
+Your Google OAuth app needs this redirect URI:
+${supabaseUrl}/auth/v1/callback
+
+📋 Steps to fix:
+1. Go to Google Cloud Console
+2. Navigate to APIs & Services > Credentials  
+3. Edit your OAuth 2.0 Client ID
+4. Add this redirect URI: ${supabaseUrl}/auth/v1/callback
+5. Save and try signing in again
+          `)
         }
       } else {
         console.log("❌ No OAuth URL generated!")
@@ -136,7 +184,7 @@ Debug Info:
       )}
 
       {debugInfo && (
-        <div className="mb-4 p-4 bg-blue-100 border border-blue-400 text-blue-700 rounded max-w-2xl">
+        <div className="mb-4 p-4 bg-blue-100 border border-blue-400 text-blue-700 rounded max-w-4xl">
           <strong>Debug Info:</strong>
           <pre className="text-xs mt-2 whitespace-pre-wrap">{debugInfo}</pre>
         </div>
@@ -164,8 +212,8 @@ Debug Info:
         </p>
         <ol className="text-left mt-2 space-y-1">
           <li>1. Click "Debug OAuth Configuration" first</li>
-          <li>2. Check the console output and debug info above</li>
-          <li>3. Verify your Google OAuth app redirect URIs match</li>
+          <li>2. Check the debug info above for the exact redirect URI</li>
+          <li>3. Add that redirect URI to your Google OAuth app</li>
           <li>4. Then try "Sign in with Google"</li>
         </ol>
       </div>
