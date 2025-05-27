@@ -1,15 +1,13 @@
 "use client"
 
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
+import { supabase } from "@/lib/supabase"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 const LoginScreen = () => {
   const router = useRouter()
-  const supabase = createClientComponentClient()
 
   useEffect(() => {
     const checkSession = async () => {
@@ -23,7 +21,7 @@ const LoginScreen = () => {
     }
 
     checkSession()
-  }, [router, supabase])
+  }, [router])
 
   const handleSignIn = async () => {
     await supabase.auth.signInWithOAuth({
