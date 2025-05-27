@@ -18,22 +18,27 @@ export async function GET(request: NextRequest) {
   console.log("4. Full URL:", requestUrl.toString())
   console.log("5. All search params:", Object.fromEntries(requestUrl.searchParams))
   console.log("6. Request headers:", Object.fromEntries(request.headers.entries()))
+  console.log("7. Request method:", request.method)
+  console.log("8. Request origin:", requestUrl.origin)
+  console.log("9. Request pathname:", requestUrl.pathname)
 
   // Handle OAuth errors
   if (error) {
-    console.error("7. OAuth error:", error)
+    console.error("10. OAuth error:", error)
     const errorDescription = requestUrl.searchParams.get("error_description")
-    console.error("8. Error description:", errorDescription)
+    console.error("11. Error description:", errorDescription)
     return NextResponse.redirect(`${requestUrl.origin}/auth/auth-code-error`)
   }
 
   if (!code) {
-    console.error("9. ❌ No authorization code received!")
-    console.log("10. This might indicate:")
+    console.error("12. ❌ No authorization code received!")
+    console.log("13. This might indicate:")
     console.log("    - OAuth flow was cancelled by user")
     console.log("    - Supabase OAuth configuration issue")
-    console.log("    - Redirect URL mismatch")
+    console.log("    - Redirect URL mismatch in Google OAuth app")
     console.log("    - Google OAuth app configuration issue")
+    console.log("14. Expected redirect URL should be:", `${requestUrl.origin}/auth/callback`)
+    console.log("15. Actual URL received:", requestUrl.toString())
 
     // Redirect back to login with error info
     return NextResponse.redirect(`${requestUrl.origin}/?error=no_code`)
@@ -43,10 +48,10 @@ export async function GET(request: NextRequest) {
   const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
 
   try {
-    console.log("11. Exchanging code for session...")
+    console.log("16. Exchanging code for session...")
     const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
-    console.log("12. Exchange result:", {
+    console.log("17. Exchange result:", {
       hasSession: !!data.session,
       hasUser: !!data.user,
       hasProviderToken: !!data.session?.provider_token,
@@ -56,16 +61,16 @@ export async function GET(request: NextRequest) {
     })
 
     if (exchangeError) {
-      console.error("13. Session exchange error:", exchangeError)
+      console.error("18. Session exchange error:", exchangeError)
       return NextResponse.redirect(`${requestUrl.origin}/auth/auth-code-error`)
     }
 
-    console.log("14. Full session data:", JSON.stringify(data.session, null, 2))
-    console.log("15. Session properties:", data.session ? Object.keys(data.session) : "No session")
+    console.log("19. Full session data:", JSON.stringify(data.session, null, 2))
+    console.log("20. Session properties:", data.session ? Object.keys(data.session) : "No session")
 
     // Check for provider token
     if (data.session?.provider_token) {
-      console.log("16. ✅ Provider token found! Length:", data.session.provider_token.length)
+      console.log("21. ✅ Provider token found! Length:", data.session.provider_token.length)
 
       // Store the provider token
       const tokenData = {
@@ -77,19 +82,19 @@ export async function GET(request: NextRequest) {
         updated_at: new Date().toISOString(),
       }
 
-      console.log("17. Storing token in database...")
+      console.log("22. Storing token in database...")
       const { error: tokenError } = await supabase.from("user_tokens").upsert(tokenData, {
         onConflict: "user_id,provider",
       })
 
       if (tokenError) {
-        console.error("18. ❌ Token storage error:", tokenError)
+        console.error("23. ❌ Token storage error:", tokenError)
       } else {
-        console.log("19. ✅ Token stored successfully!")
+        console.log("24. ✅ Token stored successfully!")
       }
     } else {
-      console.error("20. ❌ No provider token in session!")
-      console.log("21. Available session keys:", data.session ? Object.keys(data.session) : [])
+      console.error("25. ❌ No provider token in session!")
+      console.log("26. Available session keys:", data.session ? Object.keys(data.session) : [])
 
       // Check for any token-like fields
       if (data.session) {
@@ -100,14 +105,14 @@ export async function GET(request: NextRequest) {
             key.toLowerCase().includes("access") ||
             key.toLowerCase().includes("oauth"),
         )
-        console.log("22. Token-related keys found:", tokenKeys)
+        console.log("27. Token-related keys found:", tokenKeys)
       }
     }
 
-    console.log("23. Redirecting to dashboard...")
+    console.log("28. Redirecting to dashboard...")
     return NextResponse.redirect(`${requestUrl.origin}/dashboard`)
   } catch (error) {
-    console.error("24. ❌ Unexpected error:", error)
+    console.error("29. ❌ Unexpected error:", error)
     return NextResponse.redirect(`${requestUrl.origin}/auth/auth-code-error`)
   }
 }
